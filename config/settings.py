@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     log_level: str = "info"
     
     # Model Configuration
-    model_path: str = "best_model_32epochs.keras"
+    model_path: str = "models/best_model_32epochs.keras"
     backup_model_path: str = "efficientnet_32epochs_20250525_075651.keras"
     image_size: tuple = (300, 300)
     
