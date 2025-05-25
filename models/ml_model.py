@@ -3,6 +3,7 @@ import numpy as np
 from typing import Optional, Dict, Any
 import tensorflow as tf
 from PIL import Image
+from utils.constants import CLEAN_CLASS_NAMES
 from utils.logger import logger
 
 class MLModel:
