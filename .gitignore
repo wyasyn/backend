@@ -412,8 +412,6 @@ merges.txt
 *.mlpackage
 
 # Model directories (common patterns)
-models/
-model/
 checkpoints/
 saved_models/
 pretrained/
