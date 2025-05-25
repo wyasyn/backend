@@ -1,12 +1,13 @@
 import numpy as np
 from typing import Dict, List
+from PIL import Image
+import io
 from models.ml_model import model_instance
 from services.image_service import image_service
 from utils.logger import logger
 from utils.constants import CLEAN_CLASS_NAMES
 
 class PredictionService:
-  
     
     def __init__(self):
         self.model = model_instance
@@ -14,11 +15,18 @@ class PredictionService:
     def predict_single_image(self, image_data: bytes) -> Dict:
         
         try:
-            # Preprocess image
-            processed_image = image_service.preprocess_image(image_data)
+            # Convert bytes to PIL Image
+            pil_image = Image.open(io.BytesIO(image_data))
             
-            # Make prediction
-            predictions = self.model.predict(processed_image)
+            # Validate the image first (optional, using image_service for validation only)
+            if hasattr(image_service, 'validate_image_file'):
+                # You can still use image_service for validation if needed
+                content_type = f"image/{pil_image.format.lower()}" if pil_image.format else "image/unknown"
+                if not image_service.validate_image_file(content_type, len(image_data)):
+                    raise ValueError("Invalid image file")
+            
+            # Let MLModel handle ALL preprocessing - no double processing
+            predictions = self.model.predict(pil_image)
             
             # Format results
             results = self.model.format_predictions(predictions)
