@@ -237,21 +237,85 @@ class MLModel:
         ]
         
     def format_predictions(self, predictions: np.ndarray, top_k: int = 5) -> dict:
-       
+        """
+        Format predictions with proper error handling and fallbacks
+        """
         try:
+            # Validate predictions input
+            if predictions is None or len(predictions) == 0:
+                raise ValueError("Predictions array is empty or None")
+            
+            if len(predictions.shape) < 2 or predictions.shape[0] == 0:
+                raise ValueError(f"Invalid predictions shape: {predictions.shape}")
+            
+            # Get the first prediction (batch dimension)
+            pred_array = predictions[0]
+            
+            if len(pred_array) == 0:
+                raise ValueError("Prediction array is empty")
+            
             # Get the predicted class index
-            predicted_class_index = np.argmax(predictions[0])
-            predicted_class = CLEAN_CLASS_NAMES[predicted_class_index]
-            confidence = float(predictions[0][predicted_class_index])
+            predicted_class_index = np.argmax(pred_array)
+            confidence = float(pred_array[predicted_class_index])
             
-            # Get top k predictions
-            top_k_indices = np.argsort(predictions[0])[-top_k:][::-1]
-            all_predictions = {}
+            # Try to get class names from CLEAN_CLASS_NAMES
+            try:
+                from utils.constants import CLEAN_CLASS_NAMES
+                
+                # Validate CLEAN_CLASS_NAMES
+                if not CLEAN_CLASS_NAMES or len(CLEAN_CLASS_NAMES) == 0:
+                    logger.warning("CLEAN_CLASS_NAMES is empty, using fallback names")
+                    raise ValueError("CLEAN_CLASS_NAMES is empty")
+                
+                if predicted_class_index >= len(CLEAN_CLASS_NAMES):
+                    logger.warning(f"Predicted index {predicted_class_index} >= len(CLEAN_CLASS_NAMES) {len(CLEAN_CLASS_NAMES)}")
+                    raise IndexError("Predicted class index out of range")
+                
+                predicted_class = CLEAN_CLASS_NAMES[predicted_class_index]
+                
+            except (ImportError, ValueError, IndexError) as e:
+                logger.warning(f"Could not use CLEAN_CLASS_NAMES: {e}, using fallback")
+                # Fallback to basic class names
+                fallback_names = self.get_class_names()
+                if predicted_class_index < len(fallback_names):
+                    predicted_class = fallback_names[predicted_class_index]
+                else:
+                    predicted_class = f"Class_{predicted_class_index}"
             
-            for idx in top_k_indices:
-                class_name = CLEAN_CLASS_NAMES[idx]
-                prob = float(predictions[0][idx])
-                all_predictions[class_name] = round(prob, 4)
+            # Get top k predictions with validation
+            try:
+                # Ensure top_k doesn't exceed available classes
+                actual_top_k = min(top_k, len(pred_array))
+                top_k_indices = np.argsort(pred_array)[-actual_top_k:][::-1]
+                
+                all_predictions = {}
+                
+                for idx in top_k_indices:
+                    try:
+                        # Try to get class name from CLEAN_CLASS_NAMES first
+                        if 'CLEAN_CLASS_NAMES' in globals():
+                            if idx < len(CLEAN_CLASS_NAMES):
+                                class_name = CLEAN_CLASS_NAMES[idx]
+                            else:
+                                class_name = f"Class_{idx}"
+                        else:
+                            # Fallback to basic class names
+                            fallback_names = self.get_class_names()
+                            if idx < len(fallback_names):
+                                class_name = fallback_names[idx]
+                            else:
+                                class_name = f"Class_{idx}"
+                        
+                        prob = float(pred_array[idx])
+                        all_predictions[class_name] = round(prob, 4)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing class {idx}: {e}")
+                        all_predictions[f"Class_{idx}"] = round(float(pred_array[idx]), 4)
+                
+            except Exception as e:
+                logger.warning(f"Error creating top-k predictions: {e}")
+                all_predictions = {predicted_class: round(confidence, 4)}
             
             return {
                 "predicted_class": predicted_class,
@@ -260,8 +324,17 @@ class MLModel:
             }
         
         except Exception as e:
-            logger.error(f"Error formatting predictions: {str(e)}")
-            raise RuntimeError(f"Error formatting predictions: {str(e)}")
+            logger.error(f"Critical error in format_predictions: {str(e)}")
+            logger.error(f"Predictions shape: {predictions.shape if predictions is not None else 'None'}")
+            logger.error(f"Predictions content: {predictions}")
+            
+            # Return a safe fallback response
+            return {
+                "predicted_class": "Unknown",
+                "confidence": 0.0,
+                "all_predictions": {"Unknown": 0.0},
+                "error": f"Prediction formatting failed: {str(e)}"
+            }
     
     def get_model_info(self) -> Dict[str, Any]:
         """
